@@ -1,0 +1,3 @@
+    .Code
+_start:
+    eret
