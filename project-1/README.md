@@ -2,7 +2,7 @@
 
 ## [Project 1](https://sfkaplan.people.amherst.edu/courses/2024/spring/COSC-277/assignments/project-1.pdf)
 
-Using the bios from project-0, complete the bios to achieve the following:
+Using the bios from project-0, load the kernel into RAM. Then complete the kernel to achieve the following:
 
 ### Handle interrupts.
 
