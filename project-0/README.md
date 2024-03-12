@@ -4,8 +4,7 @@
 
 Complete the bios to achieve the following
 
-(a) Find the RAM in the physical address space.
-(b) Find the second ROM in the physical address space. Both your BIOS and users
-of it assume that this second ROM is the kernel.
-(c) Copy the kernel (2nd ROM) into main memory (RAM)
-(d) Jump to the copied kernel’s first machine code instruction.
+1. Find the RAM in the physical address space.
+2. Find the second ROM in the physical address space. Both your BIOS and users of it assume that this second ROM is the kernel.
+3. Copy the kernel (2nd ROM) into main memory (RAM)
+4. Jump to the copied kernel’s first machine code instruction.
