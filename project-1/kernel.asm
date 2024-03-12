@@ -168,8 +168,6 @@ _procedure_print:
 
 	## Callee prologue: Push preserved registers.
 	sw		ra,		4(fp)					# Preserve ra
-	## fp = 0x00012ff8
-	## sp = 0x00012fec
 	addi		sp,		sp,		-28			# Push & preserve a0 / s[1-6]
 	sw		a0,		-4(fp)
 	sw		s1,		-8(fp)
@@ -314,57 +312,138 @@ _scroll_console_update_offset:
 
 
 ### ================================================================================================================================
-### Procedure : _syscall_print
-### Parameters:
-### 	[a0] -> syscall code
-###		[a1] -> virtual_addr of the string to print
-### 	[a2] -> length of string to print
-_syscall_print:
-	## save the locals on the stack
-	addi sp, sp, -12 # create stack space
-	sw a0, 8(sp) 	# syscall code M[sp + 8] = a0
-	sw a1, 4(sp) 	# virt_addr M[sp + 4] = a1
-	sw a2, 0(sp) 	# length M[sp] = a2
+### Procedure: _procedure_store_user_process_state
 
-	# add base to a0
-	csrr a0, 5
-	add a0, a0, a1 		# base + virt_addr
-	# call procedure print
-	call _procedure_print
+_procedure_store_user_process_state:
+	# store the registers into the stack
+	addi sp, sp, -124
+	sw ra, 0(sp)
+	sw sp, 4(sp)
+	sw gp, 8(sp)
+	sw tp, 12(sp)
+	sw t0, 16(sp)
+	sw t1, 20(sp)
+	sw t2, 24(sp)
+	sw fp, 28(sp)
+	sw s1, 32(sp)
+	sw a0, 36(sp)
+	sw a1, 40(sp)
+	sw a2, 44(sp)
+	sw a3, 48(sp)
+	sw a4, 52(sp)
+	sw a5, 56(sp)
+	sw a6, 60(sp)
+	sw a7, 64(sp)
+	sw s2, 68(sp)
+	sw s3, 72(sp)
+	sw s4, 76(sp)
+	sw s5, 80(sp)
+	sw s6, 84(sp)
+	sw s7, 88(sp)
+	sw s8, 92(sp)
+	sw s9, 96(sp)
+	sw s10, 100(sp)
+	sw s11, 104(sp)
+	sw t3, 108(sp)
+	sw t4, 112(sp)
+	sw t5, 116(sp)
+	sw t6, 120(sp)
+	ret
 
-	## restore the registers
-	lw a0, 8(sp)
-	lw a1, 4(sp)
-	lw a2, 0(sp)
+### Procedure: _procedure_load_user_process_state
+### RETRIEVE THE INTERRUPTED USER STATE
+_procedure_load_user_process_state:
+	### INCREMENT THE ENVIROMENT PROCESS COUNTER TO THE NEXT INSTRUCTION
+	csrr t0, epc
+	addi t0, t0, 4
+	csrw epc, t0
+	### LOAD THE REGISTERS FROM THE STACK
+	la t0, _static_x2
+	lw sp, 0(t0)
+	lw ra, 0(sp)
+	lw gp, 8(sp)
+	lw tp, 12(sp)
+	lw t0, 16(sp)
+	lw t1, 20(sp)
+	lw t2, 24(sp)
+	lw fp, 28(sp)
+	lw s1, 32(sp)
+	lw a0, 36(sp)
+	lw a1, 40(sp)
+	lw a2, 44(sp)
+	lw a3, 48(sp)
+	lw a4, 52(sp)
+	lw a5, 56(sp)
+	lw a6, 60(sp)
+	lw a7, 64(sp)
+	lw s2, 68(sp)
+	lw s3, 72(sp)
+	lw s4, 76(sp)
+	lw s5, 80(sp)
+	lw s6, 84(sp)
+	lw s7, 88(sp)
+	lw s8, 92(sp)
+	lw s9, 96(sp)
+	lw s10, 100(sp)
+	lw s11, 104(sp)
+	lw t3, 108(sp)
+	lw t4, 112(sp)
+	lw t5, 116(sp)
+	lw t6, 120(sp)
+	addi sp, sp, 124
 
-### ================================================================================================================================
+	### RETURN TO THE USER PROCESS
+	eret
 
 
-### ================================================================================================================================
+### Procedure: _syscall_print
+### [a6] : parameter
+_procedure_syscall_print:
+	### return 1 if a6 == _static_syscall_PRINT_CODE
+	la t0, _static_syscall_PRINT_CODE
+	lw t0, 0(t0)
+	xor t0, a6, t0
+	beqz t0, _syscall_print
+	ret
+
+
+_procedure_syscall_exit:
+	### return 1 if a6 == _static_syscall_EXIT_CODE
+	la t0, _static_syscall_EXIT_CODE
+	lw t0, 0(t0)
+	xor t0, a6, t0
+	beqz t0, _syscall_exit_program
+	ret
+
+
 ### Procedure: _procedure_syscall_handler
-### Parameters:
-###		[a6] -> holds exit_code
-### Locals:
-### 	[a7] -> load necessary exit codes to check
-### syscalls
-### _static_syscall_exit_code : 0xabcd0001 -> exit
-### _syscall_exit_program: 0xabcd0002 -> print (expects syscall code [a0], virt_addr [a1], length [a2])
+### [a6] : parameter
 _procedure_syscall_handler:
-	# load the kernel sp
+	call _procedure_store_user_process_state
+	la t0, _static_x2
+	sw sp, 0(t0)
+	# load the stack pointer into t0
 	la t0, _static_kernel_sp
 	lw sp, 0(t0)
+	# check if the syscall is print
+	call _procedure_syscall_print
+	call _procedure_syscall_exit
+	lui a0, 0xDEAD # load dead into 
+	halt
 
-	## check if the value of reg a6 == 0x80
-	lw a7, _static_syscall_exit_code
-	xor a7, a7, a6 # a7 = val(a6) ^ 0xabcd0001 (exit code)
-	beqz a7, _syscall_exit_program
-
-	lw a7, _static_syscall_print_code
-	xor a7, a7, a6 # a7 = val(a6) ^ 0xabcd0001 (exit code)
-	beqz a7, _syscall_print
+_syscall_print:
+	# The string is loaded in a7 (its a virtual address)
+	# we need to load the physical address of the string
+	# we do that by the base of RAM + the virtual address
+	
+	lw a0, _static_ROM_destination
+	# add the virtual address to the base of RAM
+	add a0, a0, a7
+	# call the print procedure
+	call _procedure_print
+	call _procedure_load_user_process_state
 	
 
-	halt
 _syscall_exit_program:
 	# print exiting program successfully.
 	la a0, _string_exit_program_success
@@ -379,23 +458,11 @@ _syscall_exit_program:
 ### Procedure: default_handler
 
 _procedure_default_handler:
-
 	# retrieve sp from statics
 	lw sp, _static_kernel_sp
 
 	lw		a0,		_static_kernel_error_unmanaged_interrupt
 	halt
-### ================================================================================================================================
-
-### ================================================================================================================================
-### Procedure save user programs in eai (interrupt buffer)
-### Parameters:
-### 	[pc] : user_pc
-### 	[sp] : user_sp
-_procedure_save_interrupt_buffer:
-		# save interrupt buffer info?
-
-		ret
 ### ================================================================================================================================
 
 
@@ -421,7 +488,7 @@ _procedure_init_trap_table:
 	# load the address of the label (default handler) into the register
 	la t0, _procedure_default_handler
 	# load address of static_trap_table into register t1
-	la t1, _static_trap_table
+	la t1, static_trap_table
 	sw t0,  0(t1)
 	sw t0,  4(t1)
 	sw t0,  8(t1)
@@ -438,10 +505,10 @@ _procedure_init_trap_table:
 	sw t0, 44(t1)  
 
 	# set trap base
-	csrw t1, 2
+	csrw tb, t1
 	# set interrupt buffer
-	la t1, _static_interrupt_buffer
-	csrw t1, 4
+	la t1, static_interrupt_buffer
+	csrw epc, t1
 	ret
 	
 ### ================================================================================================================================
@@ -511,9 +578,9 @@ _procedure_find_ROM_dest:
 	
 	# create the space where user programs should begin
 	lw a2, _static_kernel_size # where RAM space ends.
-	# addi a4, a2, 0x100 # add buffer #a4 = 0.5(RAM_size) + buffer (dest for ROM)
-	lw  a0,  1(a0) # add this to the beginning of ram
-	add a0, a0, a4 # a0 += a4 add the RAM_begin + 0.5(RAM_size) + buffer
+	addi a4, a2, 0x100 # add buffer #a4 = RAM_size + buffer (dest for ROM)
+	lw  a0,  4(a0) # add this to the beginning of ram
+	add a0, a0, a4 # a0 += a4 add the RAM_begin + RAM_SIZE + buffer
 	# store dest in statics
 	la t0, _static_ROM_destination
 	sw a0, 0(t0) # store it in rom dest.
@@ -521,8 +588,7 @@ _procedure_find_ROM_dest:
 ### Procedure: Jump To Rom
 ### Preserved registers: None
 ### Parameters:
-### 	_static_ROM_device_code: device code
-### 	_static_ROM_instance_count: number of ROM we want.
+### sp + 0 = type of device
 ### sp + 4 =  instance of device
 ### sp + 8 = destination of next copy
 ### Return value:
@@ -536,69 +602,70 @@ _procedure_find_ROM_dest:
 
 
 _procedure_jump_to_ROM:
-	### retrieve val from stack
+	### RETRIEVE THE DEVICE CODE AND INSTANCE FROM THE STATICS
 	lw a0, _static_ROM_device_code # a0 = constant of device
 	lw a1, _static_ROM_instance_count # a1 = rom isntance count
 
+	### FIND THE DEVICE TABLE ENTRY FOR THE ROM
 	call _procedure_find_device
 	beqz a0, exit_kernel
 
-	### calculate size of found device 
+	### CALCULATE SIZE OF FOUND DEVICE 
 	addi a0, a0, 1 # increment by 1 (location of the start ptr to kernel (2nd rom))
 	lw t1, 0(a0) # a0 => start ptr to kernel
 	lw t2, 4(a0) # load value in t2 = M[a0 + 4] # end of device
-	lw t1, 0(a0) # load value in t1 = M[a0] # beginning of device
-	sub t0, t2, t1
+	sub t0, t2, t1 # length of program = end - start
 	add s4, t0, zero # store length of program in s4
 	
-	lw a2, _static_ROM_destination # a2 = destination of copy
+	lw a2, _static_ROM_destination # a2 = where the ROM should be copied to (destination)
 
-	## perform dma copy.
+	### DMA PORTAL
 	lw		t4,		_static_device_table_base       # t4 = dt_controller_ptr
 	lw		t3,		8(t4)					# t3 = dt_controller_ptr->limit
 	addi	t3,		t3,		-12			# DMA_portal_ptr = dt_controller_ptr->limit - 3*|word|
 
-	## Copy the source, destination, and length into the portal.  The last step triggers the DMA copy.
+	### COPY THE ROM TO THE DESTINATION USING DMA PORTAL
 	sw		t1,		0(t3)					# DMA->source      = src_ptr
 	sw		a2,		4(t3)					# DMA->destination = dst_ptr
 	sw		t0,		8(t3)					# DMA->length      = length (trigger)
 	
 
-	# load device instance
+	### INCREMENT THE INSTANCE COUNT FOR FUTURE ROMS
 	la t1, _static_ROM_instance_count # a1 = M[sp + 4] # instance of device
 	lw a1, 0(t1)
 	addi a1, a1, 1 # increment it by 1
-	sw a1, 0(t1) # store it back on the stack
+	sw a1, 0(t1) # store it back on the statics
+	lw t2, _static_ROM_instance_count 
 
+	
+	### CREATE A NEW STACK FOR THE USER PROGRAM	
+	la a0, _static_kernel_sp # initialize stack for user program
+	sw sp, 0(a0) # save the current sp in statics
 
-	# initialize stack for user program
-	# save the current sp in text statics
-	la a0, _static_kernel_sp
-	sw sp, 0(a0)
+	### INITIALIZE THE NEW STACK & JUMP TO THE USER PROGRAM
 
-	# intialize new stack for user program
-
-	## get the RAM
+	### GET THE RAM DEVICE TABLE
 	lw a0, _static_RAM_device_code
 	addi a1, zero, 1
 	call _procedure_find_device
 
 	lw sp, 2(a0) # end of RAM
 
-	# base
-	csrw a2, 5 # set base 
-	# limit
-	add s4, a2, s4
-	csrw s4, 6
+	# SET THE BASE AND LIMIT FOR THE USER PROGRAM
+	csrw bs, a2 # set base 
+	
+	add s4, a2, s4 # set limit = base + length of program + buffer
+	addi s4, s4, 0x200 # add buffer
+	csrw lm,  s4
 	
 
-	##  put dest in ra
-	csrw zero, 3
+	##  put dest in c
+	csrw epc, zero
 	## enable virtual addressing
 	# read the mode into t0
 	ori t0, zero, 4
-	csrw t0, 1
-	
+	csrw md, t0
+
 	eret
 
 	# Do something that causes an interrupt!
@@ -624,8 +691,8 @@ main_return:
 	## A special marker that indicates the beginning of the statics.  The value is just a magic cookie, in case any code wants
 	## to check that this is the correct location (with high probability).
 _static_statics_start_marker:	0xdeadcafe
-_static_trap_table: 0 0 0 0 0 0 0 0 0 0 0 0
-_static_interrupt_buffer: 0 0
+static_trap_table: 0 0 0 0 0 0 0 0 0 0 0 0
+static_interrupt_buffer: 0 0
 
 	## Device table location and codes.
 _static_device_table_base:	0x00001000
@@ -642,10 +709,6 @@ _static_kernel_error_RAM_not_found:		0xffff0001
 _static_kernel_error_small_RAM:			0xffff0002	
 _static_kernel_error_console_not_found:		0xffff0003
 _static_kernel_error_unmanaged_interrupt:	0xffff0004
-
-	### Syscall codes
-_static_syscall_exit_code: 0xabcd0001
-_static_syscall_print_code: 0xabcd0002
 	
 	## Constants for printing and console management.
 _static_console_width:		80
@@ -668,8 +731,13 @@ _static_kernel_sp: 	0
 	### Variables needed so kernel can run next ROM
 _static_ROM_instance_count: 3
 _static_ROM_destination: 0
-_static_user_sp: 0
-_static_user_pc: 0
+_static_syscall_EXIT_CODE: 0xabcd0001
+_static_syscall_PRINT_CODE: 0xabcd0002
+
+### stack pointer for user process
+_static_x2: 0
+
+
 ### ================================================================================================================================
 
 
@@ -685,7 +753,6 @@ _string_attribution_msg:	"COSC-277 : Operating Systems\n"
 _string_halting_msg:		"Halting kernel..."
 _string_initializing_tt_msg:	"Initializing trap table..."
 _string_exit_program_success: "Exited Program\n"
-_string_handling_syscall: "Handling syscall\n"
 _string_exit_kernel_success: "Exited Kernel Successfully\n"
 _string_syscall_error: "Error while executing syscall\n"
 _string_done_msg:		"done.\n"
